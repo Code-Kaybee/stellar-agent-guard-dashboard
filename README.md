@@ -104,6 +104,8 @@ Demo mode is strictly opt-in. When neither the environment flag nor the query pa
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
 npm test             # unit tests (31/31 passing)
+npm run test:e2e     # Playwright end-to-end suites (headless Chromium, mock chain)
+npm run test:perf    # telemetry throughput benchmark (local; not a CI gate)
 npm run build        # Next.js production build
 npm run inspect      # read-only dump of an instance's state
 ```
