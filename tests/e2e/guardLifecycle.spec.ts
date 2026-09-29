@@ -47,6 +47,12 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await connected.waitFor({ state: "visible", timeout: 5_000 });
   } catch {
     await page.getByRole("button", { name: "Connect admin wallet" }).click();
+    // The connect button opens the provider picker rather than connecting
+    // directly (#96). Freighter is the provider the mock installs, so choose
+    // it once detection has marked it "detected".
+    const picker = page.getByRole("dialog", { name: "Choose a wallet provider" });
+    await expect(picker.getByText("detected", { exact: true })).toBeVisible();
+    await picker.getByRole("button", { name: "Connect", exact: true }).click();
     await connected.waitFor({ state: "visible" });
   }
   await expect(connected).toBeVisible();

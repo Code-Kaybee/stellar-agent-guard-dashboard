@@ -26,10 +26,16 @@ import { TELEMETRY_CSV_COLUMNS } from "../../lib/guard/telemetryExport.ts";
 /** The console's default guard — the one the feed tails in this test. */
 const WATCHED_GUARD = "CAYJZT4XH5SWDXNR7MZJCCUBIDAT2KZDDUTZ7OZQEMKCPJGD4P3X4CU7";
 
-/** Scope every assertion to the feed panel, never to another `table.events`. */
+/**
+ * Scope every assertion to the feed panel, never to another `table.events`.
+ *
+ * The dashboard grid (#149) wraps each panel in a `<section class="panel">`
+ * that carries the same "Telemetry" title, so this scopes to the feed's own
+ * `<div class="panel">` to stay on the panel whose table this suite asserts.
+ */
 function feed(page: Page) {
   return page
-    .locator(".panel")
+    .locator("div.panel")
     .filter({ has: page.getByRole("heading", { name: "Telemetry", exact: true }) });
 }
 

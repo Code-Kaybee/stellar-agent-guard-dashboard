@@ -3,11 +3,47 @@
 import { memo, useState } from "react";
 import { describeGuardEvent, explainReason, GUARD_EVENT_TOPICS } from "stellar-agent-guard-sdk";
 import type { GuardEvent } from "stellar-agent-guard-sdk";
-import { useGuard } from "./GuardProvider.tsx";
+import { eventKey, useGuard, useGuardEvents } from "./GuardProvider.tsx";
 import { TelemetryAlerts } from "./TelemetryAlerts.tsx";
 import { ErrorBlock, relativeTime, short, starLink } from "./bits.tsx";
 import { DateRangePicker } from "./DateRangePicker.tsx";
 import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
+import {
+  EMPTY_TELEMETRY_FILTER,
+  filterGuardEvents,
+  telemetryToCsv,
+  telemetryToNdjson,
+  type TelemetryFilter,
+  type VerdictFilter,
+} from "../lib/guard/telemetryExport.ts";
+
+/** Human names for the topic filter's options, keyed by the topic symbol. */
+const TOPIC_LABELS: Record<string, string> = {
+  [GUARD_EVENT_TOPICS.authChecked]: "Authorization decisions",
+  [GUARD_EVENT_TOPICS.heartbeat]: "Agent heartbeats",
+  [GUARD_EVENT_TOPICS.initialized]: "Account initialized",
+  [GUARD_EVENT_TOPICS.frozen]: "Admin freeze",
+  [GUARD_EVENT_TOPICS.unfrozen]: "Admin unfreeze",
+  [GUARD_EVENT_TOPICS.policySet]: "Policy installed",
+  [GUARD_EVENT_TOPICS.policyRevoked]: "Policy revoked",
+};
+
+/**
+ * Save a text payload as a download.
+ *
+ * A blob URL with the `download` attribute, not a `data:` URL: the content can
+ * be arbitrarily large (10k-event exports) and browsers cap data-URL
+ * navigation. Revoking immediately after the click is safe — the browser has
+ * already captured the blob by then.
+ */
+function downloadText(filename: string, content: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * The live event feed.
@@ -24,8 +60,21 @@ import type { RangePreset, TimeRange } from "../lib/guard/ledgerTime.ts";
  *     mean absence of refusals on chain.
  */
 export function TelemetryFeed() {
-  const { events, feed, startWatching, stopWatching, clearEvents, guard, queryRange, rangeLabel } =
+  // The feed subscribes to the events context itself: batches re-render this
+  // panel and nothing else (see `GuardEventsContext`).
+  const events = useGuardEvents();
+  const { feed, startWatching, stopWatching, clearEvents, guard, queryRange, rangeLabel } =
     useGuard();
+  const [filter, setFilter] = useState<TelemetryFilter>(EMPTY_TELEMETRY_FILTER);
+
+  // The three controls and the exports all act on the same projection, so a
+  // CSV/NDJSON download is provably the filtered view on screen — one row in,
+  // one line out, never a hidden superset.
+  const rows = filterGuardEvents(events, filter);
+  const filterActive =
+    filter.verdict !== EMPTY_TELEMETRY_FILTER.verdict ||
+    filter.topic !== EMPTY_TELEMETRY_FILTER.topic ||
+    filter.contract.trim() !== EMPTY_TELEMETRY_FILTER.contract;
 
   function applyRange(range: TimeRange, preset: RangePreset) {
     // A historical query replaces the live tail view: the feed shows exactly
@@ -68,6 +117,66 @@ export function TelemetryFeed() {
               Back to live tail
             </button>
           </div>
+        )}
+      </div>
+
+      <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+        <label className="tiny muted" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          Verdict
+          <select
+            aria-label="Verdict filter"
+            value={filter.verdict}
+            onChange={(event) =>
+              setFilter((current) => ({ ...current, verdict: event.target.value as VerdictFilter }))
+            }
+          >
+            <option value="all">All verdicts</option>
+            <option value="allowed">Allowed Only</option>
+            <option value="blocked">Blocked Only</option>
+          </select>
+        </label>
+        <label className="tiny muted" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          Topic
+          <select
+            aria-label="Topic filter"
+            value={filter.topic}
+            onChange={(event) => setFilter((current) => ({ ...current, topic: event.target.value }))}
+          >
+            <option value="all">All topics</option>
+            {Object.entries(TOPIC_LABELS).map(([topic, label]) => (
+              <option key={topic} value={topic}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <input
+          aria-label="Contract address search"
+          placeholder="Contract address contains…"
+          value={filter.contract}
+          onChange={(event) => setFilter((current) => ({ ...current, contract: event.target.value }))}
+          style={{ maxWidth: 240 }}
+        />
+        <button
+          className="secondary"
+          onClick={() => downloadText("guard-telemetry.csv", telemetryToCsv(rows), "text/csv;charset=utf-8")}
+          disabled={rows.length === 0}
+        >
+          Export CSV
+        </button>
+        <button
+          className="secondary"
+          onClick={() =>
+            downloadText("guard-telemetry.ndjson", telemetryToNdjson(rows), "application/x-ndjson")
+          }
+          disabled={rows.length === 0}
+        >
+          Export NDJSON
+        </button>
+        {filterActive && (
+          <button className="secondary" onClick={() => setFilter(EMPTY_TELEMETRY_FILTER)}>
+            Clear filters
+          </button>
         )}
       </div>
 
