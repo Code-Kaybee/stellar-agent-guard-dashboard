@@ -43,17 +43,12 @@ const config: NextConfig = {
   // in the operator's own browser wallet and broadcast straight to Soroban RPC.
   // There is deliberately no API route that touches a key.
   poweredByHeader: false,
-  // Next 16 builds with Turbopack by default and treats a `webpack` key with no
-  // `turbopack` config as a likely mistake (it errors the build). The webpack
-  // key below is deliberate — it only runs for `--webpack` analysis builds —
-  // and an explicit (empty) Turbopack config is how Next is told so.
-  turbopack: {},
-  webpack(config, { nextRuntime }) {
-    if (!nextRuntime) {
-      config.plugins.push(nodeCryptoShimPlugin(path.join(process.cwd(), "lib/compat/nodeCryptoShim.ts")));
-    }
-    return config;
-  },
+  // `next build && next export` produces the static site Lighthouse CI audits.
+  // The dashboard is a pure client-side consumer of Soroban RPC — every page
+  // below is a client component tree with no server data dependency — so the
+  // export is lossless for this app. Set from CI so a developer's local `next
+  // build` keeps using the (faster) default output until they want an export.
+  ...(process.env.EXPORT_BUILD === "true" ? { output: "export" as const } : {}),
   async headers() {
     return [
       {
